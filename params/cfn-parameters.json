@@ -1,0 +1,23 @@
+{
+    "stack-prefix": "ec2-vol-backup",
+    "stack-suffix": "stack",
+    "template-path": "/cft/ec2-volume-bkp-lambda-cft.yaml",
+    "project-name": "erketu",
+    "parameters": {
+        "devl": [
+            {
+                "Environment": "devl"
+            }
+        ],
+        "test": [
+            {
+                "Environment": "test"
+            }
+        ],
+        "prod": [
+            {
+                "Environment": "prod"
+            }
+        ]
+    }
+}

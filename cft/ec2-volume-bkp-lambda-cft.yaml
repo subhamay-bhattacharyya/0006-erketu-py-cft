@@ -1,0 +1,387 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: >-
+  Project Erketu: CFN Stack Template to create a Lambda function to take daily backup of EC2 EBS Volumes and schedule 
+  the same using EventBridge Rule
+
+Metadata:
+  TemplateName: ec2-volume-bkp-lambda-cft.yaml
+  TemplateType: Lambda / IAM Role / EventBridge Rule
+  Version: 1.0.0
+  Owner: Subhamay Bhattacharyya
+  ProjectName: Erketu
+  Modification History:
+    - 1.0.0  - Oct 09, 2023   -- Initial Version
+  Resources: 
+    - IAM Role for Lambda
+    - Lambda Fucntion
+    - EventBridge Rule
+  StepsToTest: |
+    Manualy verify the Stack.
+  StepsToCleanup: |
+    Stack delete command
+  
+  AWS::CloudFormation::Interface:
+    ParameterGroups:
+    #################################### Project Name and Environment ##############################
+    - Label:
+        default: "Project Name And Environment:"
+      Parameters:
+      - ProjectName
+      - Environment
+    #################################### GitHub Attributes #########################################
+    - Label:
+        default: "GitHub Attributes:"
+      Parameters:
+      - GitHubRef
+      - GitHubURL
+      - GitHubWFRunNumber
+      - GitHubSHA
+      - GitHubRepository
+      - CiBuild
+      - StackName
+    #################################### Code Repository Bucket ####################################
+    - Label: 
+        default: "Code Repository Bucket:"
+      Parameters:
+        - CodeRepositoryS3Bucket
+    #################################### KMS Key ###################################################
+    - Label: 
+        default: "KMS Configuration:"
+      Parameters: 
+      - KmsMasterKeyId
+    #################################### Lambda Function ###########################################
+    - Label: 
+        default: "Lambda Configuration:"
+      Parameters: 
+      - LambdaExecutionRoleName
+      - LambdaExecutionPolicyName
+      - LambdaFunctionBaseName
+      - LambdaFunctionTimeoutSecs
+      - LambdaRuntime
+      - LambdaFunctionMemory
+      - LambdaReservedConcurrency
+    ParameterLabels:
+      ################################## Project Name and Environment ##############################
+      ProjectName:
+        default: "Project Name."
+      Environment:
+        default: "Environment Name."
+      #################################### KMS Key ###################################################
+      KmsMasterKeyId:
+        default: "KMS Key Id."
+      ################################## GitHub Attributes #########################################
+      GitHubRef:
+        default: "GitHub Ref"
+      GitHubURL: 
+        default: "GitHub repository URL"
+      GitHubWFRunNumber:
+        default: "GitHub Workflow Run Number."
+      GitHubSHA: 
+        default: "GitHub Workflow Run Number."
+      GitHubRepository:
+        default: "GitHub repository name."
+      CiBuild:
+        default: "Feature branch Ci Build"
+      ################################## Code Repository Bucket ####################################
+      CodeRepositoryS3Bucket:
+        default: "Lambda Code S3 Bucket."
+      ################################## Lambda Function ###########################################
+      LambdaExecutionRoleName:
+        default: "Lambda Execution Role."
+      LambdaExecutionPolicyName: 
+        default: "Lambda Excution Policy."
+      LambdaFunctionBaseName:
+        default: "Lambda Function Name."
+      LambdaFunctionTimeoutSecs:
+        default: "Lambda Function Timeout."
+      LambdaRuntime:
+        default: "Lambda Function Runtime."
+      LambdaFunctionMemory:
+        default: "Lambda Function Memory Size."
+      LambdaReservedConcurrency:
+        default: "Lambda Reserved Concurrency."
+Parameters:
+  ###################################### Project Name and Environment ##############################
+  ProjectName:
+    Default: project
+    Description: "The Project Name for which the custom resource will be used."
+    Type: String
+    MinLength: 5
+    MaxLength: 20
+    AllowedPattern: "[a-z]*"
+    ConstraintDescription: "The length should be between 5 and 30, must contain only lowercase alphabets."
+  Environment:
+    Default: devl
+    Description: "The Environment Name."
+    Type: String
+    AllowedValues: ["devl", "test", "prod"]
+    ConstraintDescription: "The Environment must be devl / test or prod"
+  #################################### GitHub Attributes #########################################
+  GitHubRef:
+    Default: ref_name
+    Description: "GitHub Ref Name"
+    Type: String
+  GitHubURL:
+    Default: "https://github.com/"
+    Description: "GitHub URL"
+    Type: String
+  GitHubWFRunNumber:
+    Default: 1
+    Description: "The Workfloww Run Number."
+    Type: Number
+  GitHubSHA:
+    Default: "sha"
+    Description: "The sha value of the last commit"
+    Type: String
+  GitHubRepository:
+    Default: 001-tarius
+    Description: "The GitHub Repository name."
+    Type: String
+    MinLength: 10
+    MaxLength: 30
+    AllowedPattern: "[a-z0-9-.]*"
+    ConstraintDescription: "The reposiroty length should be between 10 and 30, must contain only lowercase letter,numbers,dash, dot and should start with a letter."
+  CiBuild:
+    Default: ""
+    Description: "Ci Build of the feature branch."
+    Type: String
+  StackName:
+    Default: ""
+    Description: "The name of the stack which created the resource"
+    Type: String
+  ###################################### Code Repository Bucket ####################################
+  CodeRepositoryS3Bucket:
+    Default: subhamay-projects-repository-us-east-1
+    Description: "S3 Bucket Storing The Lambda Code."
+    Type: String
+    MinLength: 10
+    MaxLength: 63
+    AllowedPattern: "[a-z][a-z0-9-.]*"
+    ConstraintDescription: "The length should be between 3 and 63, must contain only lowercase letter,numbers,dash, dot and should start with a letter."
+  ###################################### KMS Key ###################################################
+  KmsMasterKeyId:
+    Default: "arn:aws:kms:us-east-1:237376087602:key/f7eb118d-f1d2-4d70-a046-dfada470840e"
+    Description: "The KMS Key Id Used For Encryption."
+    Type: String
+    MinLength: 75
+    MaxLength: 75
+    AllowedPattern: "[a-z:/0-9-]*"
+    ConstraintDescription: "The length of the KMS Key Id should be 36 and must be lowercase alphabets, numbers and dash."
+  ###################################### Lambda Function ###########################################
+  LambdaExecutionRoleName:
+    Default: lambda-role
+    Description: "The Execution Role Of The Lambda Function."
+    Type: String
+    MinLength: 10
+    MaxLength: 40
+    AllowedPattern: '[a-zA-Z-]*'
+    ConstraintDescription: "Must be between 5 and 255 characters long and begin with a letter and can contain number or hyphen (-)."
+  LambdaExecutionPolicyName:
+    Default: lambda-policy
+    Description: "The Execution Policy Attached To The Lambda Execution Role."
+    Type: String
+    MinLength: 10
+    MaxLength: 40
+    AllowedPattern: '[a-zA-Z-]*'
+    ConstraintDescription: "Must be between 5 and 255 characters long and begin with a letter and can contain number or hyphen (-)."
+  LambdaFunctionBaseName:
+    Default: bkp-ebs-vol
+    Description: "The Base Name The Lambda Function. The Region And Environment Will Be Added As Suffix By The Template."
+    Type: String
+    MinLength: 6
+    MaxLength: 40
+    AllowedPattern: '[a-zA-Z0-9-]*'
+    ConstraintDescription: "Must be between 5 and 255 characters long and begin with a letter and can contain number or hyphen (-)."
+  LambdaFunctionTimeoutSecs:
+    Default: 300
+    Description: "The Lambda Function Timeout Period (In Seconds)"
+    Type: Number
+    MinValue: 3
+    MaxValue: 900
+    ConstraintDescription: must be between 3 and 900 seconds.
+  LambdaRuntime:
+    Default: python3.8
+    Description: "Lambda Runtime (Python 3.7, 3.8 or 3.9)"
+    Type: String
+    AllowedValues: [python3.7 ,python3.8, python3.9]
+    ConstraintDescription: "The Lambda runtime should be either Python 3.7, 3.8 or 3.9"
+  LambdaFunctionMemory:
+    Default: 256
+    Description: The Lambda Function Memory in MB.
+    Type: Number
+    MinValue: 128
+    MaxValue: 10240
+    ConstraintDescription: The Lambda Memory should be between 128 and 10240.
+  LambdaReservedConcurrency:
+    Default: 1
+    Description: "Lambda Reserved Concurrency"
+    Type: Number
+    MinValue: 0
+    MaxValue: 5  
+
+Resources:
+  ###################################### Lambda Execution Role #####################################
+  ErketuLambdaExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub '${ProjectName}-${LambdaExecutionRoleName}-${Environment}${CiBuild}'
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+        - Effect: Allow
+          Principal:
+            Service:
+            - lambda.amazonaws.com
+          Action:
+          - sts:AssumeRole
+      Policies:
+        - PolicyName: !Sub '${ProjectName}-${LambdaExecutionPolicyName}-${Environment}${CiBuild}'
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+            - Sid: AllowCloudWatchLogStream
+              Effect: Allow
+              Action: 
+                - logs:CreateLogGroup
+                - logs:CreateLogStream
+                - logs:PutLogEvents
+              Resource: !Sub 'arn:${AWS::Partition}:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/lambda/${ProjectName}-${LambdaFunctionBaseName}-${Environment}-${AWS::Region}${CiBuild}:*'
+            - Sid: AllowEC2All
+              Effect: Allow
+              Action: 
+                - ec2:CreateSnapshot*
+                - ec2:CreateTags
+                - ec2:DeleteSnapshot
+                - ec2:DescribeAvailabilityZones
+                - ec2:DescribeSnapshots
+                - ec2:DescribeTags
+                - ec2:DescribeVolumeAttribute
+                - ec2:DescribeVolumeStatus
+                - ec2:DescribeVolumes
+                - ec2:CopySnapshot
+                - ec2:DescribeSnapshotAttribute
+              Resource: "*"
+            - Sid: AllowKMSDecryption
+              Effect: Allow
+              Action: 
+                - kms:Decrypt
+                - kms:Encrypt
+                - kms:GenerateDataKey
+                - kms:GenerateDataKeyPair
+              Resource:
+                - !Sub 'arn:${AWS::Partition}:kms:${AWS::Region}:${AWS::AccountId}:key/${KmsMasterKeyId}'
+      Tags: 
+      - Key: ProjectName
+        Value: !Ref ProjectName
+      - Key: EnvironmentName
+        Value: !Ref Environment
+      - Key: GitHubRepository
+        Value: !Ref GitHubRepository
+      - Key: GitHubRef
+        Value: !Ref GitHubRef
+      - Key: GitHubURL
+        Value: !Ref GitHubURL
+      - Key: GitHubWFRunNumber
+        Value: !Ref GitHubWFRunNumber
+      - Key: GitHubSHA
+        Value: !Ref GitHubSHA
+      - Key: StackName
+        Value: !Ref StackName
+  ###################################### Lambda Function Log Group #################################
+  ErketuLambdaFunctionLogGroup:
+    DeletionPolicy: Delete
+    UpdateReplacePolicy: Retain
+    Type: AWS::Logs::LogGroup
+    Properties: 
+      KmsKeyId: !Ref KmsMasterKeyId
+      LogGroupName: !Sub '/aws/lambda/${ProjectName}-${LambdaFunctionBaseName}-${Environment}-${AWS::Region}${CiBuild}'
+      RetentionInDays: 14
+      Tags: 
+        - Key: ProjectName
+          Value: !Ref ProjectName
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: GitHubRepository
+          Value: !Ref GitHubRepository
+        - Key: CodeRepositoryS3Bucket
+          Value: !Ref CodeRepositoryS3Bucket
+        - Key: GitHubRef
+          Value: !Ref GitHubRef
+        - Key: GitHubURL
+          Value: !Ref GitHubURL
+        - Key: GitHubWFRunNumber
+          Value: !Ref GitHubWFRunNumber
+        - Key: GitHubSHA
+          Value: !Ref GitHubSHA
+        - Key: StackName
+          Value: !Ref StackName
+  ###################################### Lambda Function ########################################### 
+  ErketuLambdaFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      Runtime: !Ref LambdaRuntime
+      FunctionName: !Sub '${ProjectName}-${LambdaFunctionBaseName}-${Environment}-${AWS::Region}${CiBuild}'
+      Description: "Function to take backup of EC2 volumes."
+      Role: !GetAtt ErketuLambdaExecutionRole.Arn
+      Handler: !Sub '${LambdaFunctionBaseName}.lambda_handler'
+      Code:
+        S3Bucket: !Ref CodeRepositoryS3Bucket
+        S3Key: !Sub '${GitHubRepository}/code/${LambdaFunctionBaseName}.zip'
+      Timeout: !Ref LambdaFunctionTimeoutSecs
+      MemorySize: !Ref LambdaFunctionMemory
+      KmsKeyArn: !Ref KmsMasterKeyId
+      ReservedConcurrentExecutions: !Ref LambdaReservedConcurrency
+      Environment:
+        Variables:
+          EC2_TAG_NAME: 'BackupVolume'
+          EC2_TAG_VALUE: 'Yes'
+      TracingConfig:
+        Mode: Active
+      Tags:
+        - Key: ProjectName
+          Value: !Ref ProjectName
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: GitHubRepository
+          Value: !Ref GitHubRepository
+        - Key: CodeRepositoryS3Bucket
+          Value: !Ref CodeRepositoryS3Bucket
+        - Key: GitHubRef
+          Value: !Ref GitHubRef
+        - Key: GitHubURL
+          Value: !Ref GitHubURL
+        - Key: GitHubWFRunNumber
+          Value: !Ref GitHubWFRunNumber
+        - Key: GitHubSHA
+          Value: !Ref GitHubSHA
+        - Key: StackName
+          Value: !Ref StackName
+  ###################################### EventBridge ############################################### 
+  ErketuScheduledRule: 
+    Type: AWS::Events::Rule
+    Properties: 
+      Name: !Sub '${ProjectName}-event-rule-${Environment}-${AWS::Region}${CiBuild}'
+      Description: !Sub '${ProjectName} Lambda Schedule Rule'
+      ScheduleExpression: "cron(0 1 * * ? *)"
+      State: "ENABLED"
+      Targets: 
+        - 
+          Arn: !GetAtt ErketuLambdaFunction.Arn
+          Id: !Sub '${ProjectName}-${LambdaFunctionBaseName}-${Environment}-${AWS::Region}${CiBuild}'
+  ErketuPermissionForEventsToInvokeLambda: 
+    Type: AWS::Lambda::Permission
+    Properties: 
+      FunctionName: !Sub '${ProjectName}-${LambdaFunctionBaseName}-${Environment}-${AWS::Region}${CiBuild}'
+      Action: "lambda:InvokeFunction"
+      Principal: "events.amazonaws.com"
+      SourceArn: !GetAtt ErketuScheduledRule.Arn
+Outputs:
+  LambdaFunctionLogGroupArn:
+    Description: The Arn of the Lambda Function Log Group
+    Value: !GetAtt ErketuLambdaFunctionLogGroup.Arn
+  LambdaFunctionRoleArn: 
+    Description: The Arn of the Lambda Function
+    Value: !GetAtt ErketuLambdaExecutionRole.Arn
+  LambdaFunctionArn: 
+    Description: The Arn of the Lambda Function
+    Value: !GetAtt ErketuLambdaFunction.Arn

@@ -1,0 +1,5 @@
+.zip
+.DS_Store
+sonar-scan.yaml
+params/format.sh
+params/t.json
